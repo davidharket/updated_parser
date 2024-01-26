@@ -4,25 +4,30 @@ from urllib.parse import urljoin
 import time
 import subprocess
 import os
+import cssbeautifier
 
 
+def prettify_css(css):
+    options = cssbeautifier.default_options()
+    options.indent_size = 2  # You can adjust this and other options as needed
+    return cssbeautifier.beautify(css, options)
 
 def write_to_file(file_path, content):
     """Writes content to a file."""
-    with open(file_path, 'w') as file:
+    with open(file_path, 'w', encoding="UTF-8") as file:
         file.write(content)
 
 
 
 def read_from_file(file_path):
     """Reads content from a file."""
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding="UTF-8") as file:
         return file.read()
     
 
 
 def delete_files(file_path1, file_path2, file_path3):
-    """Deletes a file."""
+    """Deletes a file."""    
     os.remove(file_path1)
     os.remove(file_path2)
     os.remove(file_path3)
@@ -39,7 +44,7 @@ def run_purify_css(html_file_path, css_file_pat):
 
 def fetch_html(domain):
     try:
-        response = requests.get(f'http://{domain}/', timeout=8)
+        response = requests.get(f'http://{domain}/', timeout=5)
         print("Response collected")
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -71,38 +76,31 @@ def fetch_page(domain):
     return response.text
 
 
-
-def process_resource(url, soup, tag, n):
+def process_resource(url, tag):
     """Process a resource and update the tag accordingly."""
     try:
         response = session.get(url, timeout=3)
         content_type = response.headers.get('Content-Type')
-        if response.text == "":
-            # Wait for a few seconds before fetching the resource
-            time.sleep(5)  # Adjust the number of seconds as needed
-            response = session.get(url)
-        if 'text' in content_type and response.text:
-            # Create a new tag based on content type
-            external_css = soup.new_tag("style" if 'css' in content_type else None)
+
+        # Check if the URL ends with .css and if the content type is CSS
+        if url.endswith('.css') and 'text/css' in content_type:
             try:
-                tag.replace_with("")
-                print(f"Wrote CSS from: {url}")
-                return external_css
-            
+                tag.replace_with("")  # Remove the original link tag
+                return response.text  # Return the CSS text
             except ValueError:
                 print(f"Error while inlining resource from: {url}")
-                pass
+                return ''  # Return empty string on error
         else:
-            print(f"Skipping non-text resource or empty response: {url}")
-            return None
-            
+            print(f"Skipping non-CSS resource: {url}")
+            return ''  # Return empty string for non-CSS resources
 
     except requests.exceptions.RequestException as e:
         print(f"Error while fetching {url}: {e}")
+        return ''  # Return empty string on fetch error
 
     except Exception as e:
         print(f"General error in inline_resource for {url}: {e}")
-
+        return ''  # Return empty string on general error
 
 
 def combined_purified_files(html, css):
@@ -110,8 +108,11 @@ def combined_purified_files(html, css):
     html = read_from_file(html)
     BeautifulSoup(html, 'html.parser')
     css = read_from_file(css)
-    html = html.replace("</head>", f"<style>{css}</style></head>")
-    return html
+    if css == "":
+        return html
+    else:
+        html = html.replace("</head>", f"<style>{css}</style></head>")
+        return html
 
 def remove_script_tags(soup):
     """Remove all script tags from the BeautifulSoup object."""
@@ -129,20 +130,40 @@ def main(domain):
 
     css = ""
     # Inline external CSS
-    for n, link_tag in enumerate(original_html.find_all('link', rel='stylesheet')):
+    for link_tag in original_html.find_all('link', rel='stylesheet'):
         href = link_tag.get('href')
         if href:
             full_url = urljoin(f"https://{domain}", href)
-            css.append(f"\n{process_resource(full_url, original_html, link_tag, n)}")
+            css += process_resource(full_url, link_tag)
 
     remove_script_tags(original_html)
 
+
+    # Write the CSS to the file
+    write_to_file("style.css", css)
+
+    # Add a link tag to the head of the HTML for the CSS file
+    try:
+        new_link_tag = original_html.new_tag("link", rel="stylesheet", href="style.css")
+        if original_html.head:
+            original_html.head.append(new_link_tag)
+        else:
+            # Create a head tag and insert it at the beginning of the html body
+            head_tag = original_html.new_tag("head")
+            original_html.html.insert(0, head_tag)
+            if head_tag != None:
+                head_tag.append(new_link_tag)
+            else:
+                print("Error while adding link tag to HTML")
+    except ValueError:
+        print("Error while adding link tag to HTML")
+
+
     write_to_file("processed.html", original_html.prettify())
 
-    write_to_file("styles.css", css)
-
-    run_purify_css("processed.html", "styles.css")
+    # Run purify_css
+    run_purify_css("processed.html", "style.css")
 
     purified_html = combined_purified_files("processed.html", "purified.css")
 
-    return(BeautifulSoup(purified_html).prettify()) 
+    return BeautifulSoup(purified_html, 'html.parser').prettify()

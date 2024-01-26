@@ -6,7 +6,7 @@ db_path = 'new_html_files.db'
 
 db = ManageDB(db_path)
 domains = db._collect_data()
-print(domains)
+#print(domains)
 list_of_no_html_domains = []
 
 
@@ -22,5 +22,5 @@ for category in domains:
             list_of_no_html_domains.append(domain)
             print(f"Error fetching HTML for {domain}")
             continue
-        delete_files("processed.html", "style.css", "purified.html", "purified.css")
+        delete_files("processed.html", "style.css", "purified.css")
 db._close_database()

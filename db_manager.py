@@ -20,13 +20,13 @@ class ManageDB:
     def _collect_data(self):
         conn = sqlite3.connect("C:/Users/bruker/Desktop/WebScraperDriftDesignV010/updated_website.db")
         cursor = conn.cursor()
-        cursor.execute('SELECT category_id, domain FROM html_files')
+        cursor.execute('SELECT category_id, domain_name FROM filtered_domains')
         result = cursor.fetchall()
 
         domains = {}
-        print("Collected data")
-        print(len(result))
-        start_index = 5478
+        #print("Collected data")
+        #print(len(result))
+        start_index = 1
 
         for index, row in enumerate(result):
             if index > start_index:
